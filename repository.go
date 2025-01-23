@@ -2,28 +2,21 @@ package main
 
 import "context"
 
-type AuthRepository interface {
-	UserRepository
-	SessionRepository
+type UserRepository interface {
+	IsPhoneBlocked(ctx context.Context, phonenumber string) (bool, error)
+	CreateUser(ctx context.Context, phonenumber string) (*User, error)
+	ReadUserByPhonenumber(ctx context.Context, phonenumber string) (*User, error)
+	UpdateUser(ctx context.Context, phonenumber string, user User) (*User, error)
+	DeleteUser(ctx context.Context, phonenumber string) error
 }
 
-type UserRepository interface {
-	CreateUser(ctx *context.Context)
-	ReadUser(ctx *context.Context)
-	UpdateUser(ctx *context.Context)
-	DeleteUser(ctx *context.Context)
+type TwilioRepository interface {
+	SendVerificationCode(ctx context.Context, phonenumber string) error
+	CheckVerificationCode(ctx context.Context, phonenumber, code string) (bool, error)
 }
 
 type SessionRepository interface {
-	CreateSession(ctx *context.Context)
-	ReadSession(ctx *context.Context)
-	UpdateSession(ctx *context.Context)
-	DeleteSession(ctx *context.Context)
-}
-
-type CookieRepository interface {
-	CreateCookie(ctx *context.Context)
-	ReadCookie(ctx *context.Context)
-	UpdateCookie(ctx *context.Context)
-	DeleteCookie(ctx *context.Context)
+	CreateSession(ctx context.Context)
+	ReadSession(ctx context.Context)
+	DeleteSession(ctx context.Context)
 }
