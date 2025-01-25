@@ -16,6 +16,6 @@ WORKDIR /
 
 COPY --from=builder /app/main /main
 
-EXPOSE 80
+EXPOSE 8080
 
 ENTRYPOINT [ "/main" ]
