@@ -32,3 +32,5 @@ docker-compose.override.yml
 # Redis data
 bobidb/
 
+# test scripts
+test-scripts/
