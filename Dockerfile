@@ -16,6 +16,9 @@ WORKDIR /
 
 COPY --from=builder /app/main /main
 
+COPY --from=builder /app/templates /templates
+
+
 EXPOSE 8080
 
 ENTRYPOINT [ "/main" ]
