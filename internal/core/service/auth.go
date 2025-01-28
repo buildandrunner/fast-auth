@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/mar-cial/space-auth/internal/core/domain"
 	"github.com/mar-cial/space-auth/internal/core/port"
@@ -127,16 +128,46 @@ func (a *authService) DeleteUser(ctx context.Context, id string) error {
 }
 
 func (a *authService) CreateSession(ctx context.Context, userid string) (*domain.Session, error) {
-	panic("not implemented") // TODO: Implement
+	// Generate new session with 24h duration
+	session, err := generateSession(userid, 24)
+	if err != nil {
+		return nil, fmt.Errorf("session generation failed: %w", err)
+	}
+
+	// Save to repository
+	if _, err := a.authRepo.SaveSession(ctx, *session, userid); err != nil {
+		return nil, fmt.Errorf("session persistence failed: %w", err)
+	}
+
+	return session, nil
 }
 
 func (a *authService) ReadSession(ctx context.Context, token string) (*domain.Session, error) {
-	panic("not implemented") // TODO: Implement
+	session, err := a.authRepo.FindSessionByToken(ctx, token)
+	if err != nil {
+		if errors.Is(err, port.ErrUserNotFound) {
+			return nil, port.ErrUserNotFound
+		}
+		return nil, fmt.Errorf("session retrieval failed: %w", err)
+	}
+
+	// Validate session expiration
+	if time.Now().After(session.ExpiresAt) {
+		// Auto-cleanup expired session
+		_ = a.authRepo.DeleteSession(ctx, token)
+		return nil, port.ErrSessionExpired
+	}
+
+	return session, nil
 }
 
 func (a *authService) DeleteSession(ctx context.Context, token string) error {
-	panic("not implemented") // TODO: Implement
+	if err := a.authRepo.DeleteSession(ctx, token); err != nil {
+		return fmt.Errorf("session deletion failed: %w", err)
+	}
+	return nil
 }
+
 func NewAuthService(ar port.AuthRepository) port.AuthService {
 	return &authService{authRepo: ar}
 }
