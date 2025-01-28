@@ -76,16 +76,54 @@ func (a *authService) ReadUserById(ctx context.Context, id string) (*domain.User
 	return user, nil
 }
 
+// service/auth_service.go
 func (a *authService) ReadUserByPhone(ctx context.Context, phonenumber string) (*domain.User, error) {
-	panic("not implemented") // TODO: Implement
+	user, err := a.authRepo.ReadUserByPhone(ctx, phonenumber)
+	if err != nil {
+		if errors.Is(err, port.ErrUserNotFound) {
+			return nil, port.ErrUserNotFound
+		}
+		return nil, fmt.Errorf("failed to read user by phone: %w", err)
+	}
+	return user, nil
 }
 
 func (a *authService) UpdateUser(ctx context.Context, user domain.User) (*domain.User, error) {
-	panic("not implemented") // TODO: Implement
+	// Verify existing user
+	existingUser, err := a.authRepo.ReadUserByID(ctx, user.ID)
+	if err != nil {
+		return nil, fmt.Errorf("user verification failed: %w", err)
+	}
+
+	// Check phone number availability if changing
+	if user.Phonenumber != existingUser.Phonenumber {
+		if _, err := a.authRepo.ReadUserByPhone(ctx, user.Phonenumber); err == nil {
+			return nil, ErrUserExists
+		}
+	}
+
+	// Perform atomic update
+	updatedUser, err := a.authRepo.UpdateUser(ctx, user)
+	if err != nil {
+		return nil, fmt.Errorf("update operation failed: %w", err)
+	}
+
+	return updatedUser, nil
 }
 
 func (a *authService) DeleteUser(ctx context.Context, id string) error {
-	panic("not implemented") // TODO: Implement
+	// Get user details first
+	user, err := a.authRepo.ReadUserByID(ctx, id)
+	if err != nil {
+		return fmt.Errorf("user lookup failed: %w", err)
+	}
+
+	// Perform atomic deletion
+	if err := a.authRepo.DeleteUser(ctx, *user); err != nil {
+		return fmt.Errorf("deletion failed: %w", err)
+	}
+
+	return nil
 }
 
 func (a *authService) CreateSession(ctx context.Context, userid string) (*domain.Session, error) {
