@@ -4,114 +4,150 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"time"
+	"fmt"
 
 	"github.com/mar-cial/space-auth/internal/core/domain"
 	"github.com/mar-cial/space-auth/internal/core/port"
 	"github.com/redis/go-redis/v9"
 )
 
-// Define all errors at the top for consistency and maintainability
-var (
-	ErrUserNotFound    = errors.New("user not found")
-	ErrSessionNotFound = errors.New("session not found")
-	ErrSerialization   = errors.New("failed to serialize data")
-	ErrDeserialization = errors.New("failed to deserialize data")
-	ErrSaveToRedis     = errors.New("failed to save to Redis")
-	ErrFetchFromRedis  = errors.New("failed to fetch from Redis")
-	ErrDeleteFromRedis = errors.New("failed to delete from Redis")
-)
+/*
+const defaultOptions = {
+  baseKeyPrefix: "",
+  accountKeyPrefix: "user:account:",
+  accountByUserIdPrefix: "user:account:by-user-id:",
+  emailKeyPrefix: "user:email:",
+  sessionKeyPrefix: "user:session:",
+  sessionByUserIdKeyPrefix: "user:session:by-user-id:",
+  userKeyPrefix: "user:",
+  verificationTokenKeyPrefix: "user:token:",
+}
+*/
 
-type RedisAuthRepository struct {
+type redisAuthRepo struct {
 	client *redis.Client
 }
 
+func (r *redisAuthRepo) SaveUser(ctx context.Context, user domain.User) (string, error) {
+	userKey := fmt.Sprintf("user:%s", user.ID)
+	userPhoneKey := fmt.Sprintf("user:phone:%s", user.Phonenumber)
+
+	marshalledUser, err := json.Marshal(user)
+	if err != nil {
+		return "", err
+	}
+
+	return r.client.MSet(ctx, userKey, marshalledUser, userPhoneKey, user.Phonenumber).Result()
+}
+
+func (r *redisAuthRepo) ReadUserByID(ctx context.Context, id string) (*domain.User, error) {
+	userkey := fmt.Sprintf("user:%s", id)
+
+	userResponse, err := r.client.Get(ctx, userkey).Result()
+	if err != nil {
+		return nil, err
+	}
+
+	user := &domain.User{}
+	if err := json.Unmarshal([]byte(userResponse), user); err != nil {
+		return nil, err
+	}
+
+	return user, nil
+}
+
+func (r *redisAuthRepo) ReadUserByPhone(ctx context.Context, phone string) (*domain.User, error) {
+	userkey := fmt.Sprintf("user:phone:%s", phone)
+
+	userResponse, err := r.client.Get(ctx, userkey).Result()
+	if err != nil {
+		return nil, err
+	}
+
+	user := &domain.User{}
+	if err := json.Unmarshal([]byte(userResponse), user); err != nil {
+		return nil, err
+	}
+
+	return user, nil
+
+}
+
+func (r *redisAuthRepo) UpdateUser(ctx context.Context, user domain.User) (*domain.User, error) {
+	userkey := fmt.Sprintf("user:%s", user.ID)
+
+	userResponse, err := r.client.Get(ctx, userkey).Result()
+	if err != nil {
+		return nil, err
+	}
+
+	u := &domain.User{}
+	if err := json.Unmarshal([]byte(userResponse), u); err != nil {
+		return nil, err
+	}
+
+	return u, nil
+}
+
+func (r *redisAuthRepo) DeleteUser(ctx context.Context, user domain.User) error {
+	userkey := fmt.Sprintf("user:%s", user.ID)
+
+	deleteUserResponse, err := r.client.Del(ctx, userkey).Result()
+	if err != nil {
+		return err
+	}
+
+	if deleteUserResponse != int64(1) {
+		return errors.New("err deleting user")
+	}
+
+	return nil
+}
+
+func (r *redisAuthRepo) SaveSession(ctx context.Context, session domain.Session, userid string) (string, error) {
+	sessionkey := fmt.Sprintf("user:session:%s", session.ID)
+	sessionByIDkey := fmt.Sprintf("user:session:by-user-id:%s", userid)
+
+	sessionbytes, err := json.Marshal(session)
+	if err != nil {
+		return "", err
+	}
+
+	return r.client.MSet(ctx, sessionkey, sessionbytes, sessionByIDkey, sessionbytes).Result()
+}
+
+func (r *redisAuthRepo) FindSessionByToken(ctx context.Context, token string) (*domain.Session, error) {
+	sessionKey := fmt.Sprintf("user:session:%s", token)
+	data, err := r.client.Get(ctx, sessionKey).Result()
+	if err != nil {
+		if errors.Is(err, redis.Nil) {
+			return nil, errors.New("session not found")
+		}
+		return nil, err
+	}
+	session := &domain.Session{}
+	if err := json.Unmarshal([]byte(data), session); err != nil {
+		return nil, err
+	}
+	return session, nil
+}
+
+func (r *redisAuthRepo) DeleteSession(ctx context.Context, token string) error {
+	sessionKey := fmt.Sprintf("user:session:%s", token)
+
+	session, err := r.FindSessionByToken(ctx, token)
+	if err != nil {
+		return err
+	}
+
+	// 2. Delete both keys (adjust if session lacks UserID)
+	sessionByUserKey := fmt.Sprintf("user:session:by-user-id:%s", session.UserID) // Assumes UserID exists
+	if err := r.client.Del(ctx, sessionKey, sessionByUserKey).Err(); err != nil {
+		return err
+	}
+	return nil
+}
+
 func NewRedisAuthRepository(client *redis.Client) port.AuthRepository {
-	return &RedisAuthRepository{client: client}
-}
-
-// SaveUser saves a user in Redis.
-func (r *RedisAuthRepository) SaveUser(ctx context.Context, user *domain.User) error {
-	userKey := "user:" + user.Phonenumber
-	userData, err := json.Marshal(user)
-	if err != nil {
-		return ErrSerialization
-	}
-
-	if err := r.client.Set(ctx, userKey, userData, 0).Err(); err != nil {
-		return ErrSaveToRedis
-	}
-
-	return nil
-}
-
-func (r *RedisAuthRepository) FindUserByPhone(ctx context.Context, phonenumber string) (*domain.User, error) {
-	userKey := "user:" + phonenumber
-
-	// Get user data from Redis
-	userData, err := r.client.Get(ctx, userKey).Result()
-	if err == redis.Nil {
-		// Handle "key not found" error gracefully
-		return nil, ErrUserNotFound
-	} else if err != nil {
-		// Handle other Redis errors
-		return nil, ErrFetchFromRedis
-	}
-
-	// Deserialize user data
-	var user domain.User
-	if err := json.Unmarshal([]byte(userData), &user); err != nil {
-		return nil, ErrDeserialization
-	}
-
-	return &user, nil
-}
-
-// CreateSession saves a session in Redis.
-func (r *RedisAuthRepository) CreateSession(ctx context.Context, session *domain.Session) error {
-	sessionKey := "session:" + session.Token
-	sessionData, err := json.Marshal(session)
-	if err != nil {
-		return ErrSerialization
-	}
-
-	// Save session data in Redis with an expiration time
-	if err := r.client.Set(ctx, sessionKey, sessionData, time.Until(session.ExpiresAt)).Err(); err != nil {
-		return ErrSaveToRedis
-	}
-
-	return nil
-}
-
-// FindSessionByToken fetches a session from Redis by token.
-func (r *RedisAuthRepository) FindSessionByToken(ctx context.Context, token string) (*domain.Session, error) {
-	sessionKey := "session:" + token
-
-	// Get session data from Redis
-	sessionData, err := r.client.Get(ctx, sessionKey).Result()
-	if err == redis.Nil {
-		return nil, ErrSessionNotFound
-	} else if err != nil {
-		return nil, ErrFetchFromRedis
-	}
-
-	// Deserialize session data
-	var session domain.Session
-	if err := json.Unmarshal([]byte(sessionData), &session); err != nil {
-		return nil, ErrDeserialization
-	}
-
-	return &session, nil
-}
-
-// DeleteSession removes a session from Redis by token.
-func (r *RedisAuthRepository) DeleteSession(ctx context.Context, token string) error {
-	sessionKey := "session:" + token
-
-	// Delete the session data
-	if err := r.client.Del(ctx, sessionKey).Err(); err != nil {
-		return ErrDeleteFromRedis
-	}
-
-	return nil
+	return &redisAuthRepo{client: client}
 }
