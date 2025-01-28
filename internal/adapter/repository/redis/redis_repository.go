@@ -74,34 +74,49 @@ func (r *redisAuthRepo) ReadUserByPhone(ctx context.Context, phone string) (*dom
 }
 
 func (r *redisAuthRepo) UpdateUser(ctx context.Context, user domain.User) (*domain.User, error) {
-	userkey := fmt.Sprintf("user:%s", user.ID)
-
-	userResponse, err := r.client.Get(ctx, userkey).Result()
+	// Get existing user to check for phone number changes
+	existingUser, err := r.ReadUserByID(ctx, user.ID)
 	if err != nil {
 		return nil, err
 	}
 
-	u := &domain.User{}
-	if err := json.Unmarshal([]byte(userResponse), u); err != nil {
-		return nil, err
+	pipe := r.client.TxPipeline()
+
+	// Update main user record
+	userKey := fmt.Sprintf("user:%s", user.ID)
+	userData, _ := json.Marshal(user)
+	pipe.Set(ctx, userKey, userData, 0)
+
+	// Handle phone number change
+	if user.Phonenumber != existingUser.Phonenumber {
+		// Delete old phone mapping
+		oldPhoneKey := fmt.Sprintf("user:phone:%s", existingUser.Phonenumber)
+		pipe.Del(ctx, oldPhoneKey)
+
+		// Create new phone mapping
+		newPhoneKey := fmt.Sprintf("user:phone:%s", user.Phonenumber)
+		pipe.Set(ctx, newPhoneKey, userData, 0)
 	}
 
-	return u, nil
+	_, err = pipe.Exec(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("update transaction failed: %w", err)
+	}
+
+	return &user, nil
 }
 
 func (r *redisAuthRepo) DeleteUser(ctx context.Context, user domain.User) error {
-	userkey := fmt.Sprintf("user:%s", user.ID)
+	pipe := r.client.TxPipeline()
 
-	deleteUserResponse, err := r.client.Del(ctx, userkey).Result()
-	if err != nil {
-		return err
-	}
+	userKey := fmt.Sprintf("user:%s", user.ID)
+	phoneKey := fmt.Sprintf("user:phone:%s", user.Phonenumber)
 
-	if deleteUserResponse != int64(1) {
-		return errors.New("err deleting user")
-	}
+	pipe.Del(ctx, userKey)
+	pipe.Del(ctx, phoneKey)
 
-	return nil
+	_, err := pipe.Exec(ctx)
+	return err
 }
 
 func (r *redisAuthRepo) SaveSession(ctx context.Context, session domain.Session, userid string) (string, error) {
