@@ -119,24 +119,28 @@ func (r *redisAuthRepo) DeleteUser(ctx context.Context, user domain.User) error 
 	return err
 }
 
+// Fix session key generation in redis/repository.go
 func (r *redisAuthRepo) SaveSession(ctx context.Context, session domain.Session, userid string) (string, error) {
-	sessionkey := fmt.Sprintf("user:session:%s", session.ID)
-	sessionByIDkey := fmt.Sprintf("user:session:by-user-id:%s", userid)
+	sessionKey := fmt.Sprintf("user:session:%s", session.Token) // Use Token instead of ID
+	sessionByIDKey := fmt.Sprintf("user:session:by-user-id:%s", userid)
 
-	sessionbytes, err := json.Marshal(session)
+	sessionBytes, err := json.Marshal(session)
 	if err != nil {
 		return "", err
 	}
 
-	return r.client.MSet(ctx, sessionkey, sessionbytes, sessionByIDkey, sessionbytes).Result()
+	return r.client.MSet(ctx, sessionKey, sessionBytes, sessionByIDKey, sessionBytes).Result()
 }
 
+// Add proper error type to port
+
+// Update FindSessionByToken in redis/repository.go
 func (r *redisAuthRepo) FindSessionByToken(ctx context.Context, token string) (*domain.Session, error) {
 	sessionKey := fmt.Sprintf("user:session:%s", token)
 	data, err := r.client.Get(ctx, sessionKey).Result()
 	if err != nil {
 		if errors.Is(err, redis.Nil) {
-			return nil, errors.New("session not found")
+			return nil, port.ErrSessionNotFound
 		}
 		return nil, err
 	}
