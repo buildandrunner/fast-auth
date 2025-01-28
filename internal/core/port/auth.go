@@ -2,9 +2,14 @@ package port
 
 import (
 	"context"
+	"errors"
 
 	"github.com/gin-gonic/gin"
 	"github.com/mar-cial/space-auth/internal/core/domain"
+)
+
+var (
+	ErrUserNotFound = errors.New("user not found")
 )
 
 // auth core
