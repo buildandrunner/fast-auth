@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>bobi</title>
+    <link rel="stylesheet" href="/styles/main.css">
+    <script src="/htmx/htmx.min.js"></script>
+</head>
+<body>
+    <h1>Authentication</h1>
+
+    <!-- Register Form -->
+    <form hx-post="/register" hx-target="#register-result" hx-swap="outerHTML">
+        <input type="text" name="phonenumber" placeholder="Phone Number" required>
+        <button type="submit">Register</button>
+    </form>
+    <div id="register-result"></div>
+
+    <!-- Login Form -->
+    <form hx-post="/login" hx-target="#login-result" hx-swap="outerHTML">
+        <input type="text" name="phonenumber" placeholder="Phone Number" required>
+        <button type="submit">Login</button>
+    </form>
+    <div id="login-result"></div>
+
+    <!-- Logout Form -->
+    <form hx-post="/logout" hx-target="#logout-result" hx-swap="outerHTML">
+        <input type="text" name="token" placeholder="Token" required>
+        <button type="submit">Logout</button>
+    </form>
+    <div id="logout-result"></div>
+</body>
+</html>
+
