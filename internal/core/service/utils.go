@@ -34,14 +34,15 @@ func generateToken() string {
 }
 
 // CreateSession generates a new session for a user.
-func createSession(userID string, durationHours int) (*domain.Session, error) {
+func generateSession(userID string, durationHours int) (*domain.Session, error) {
 	if durationHours <= 0 {
 		return nil, ErrInvalidSessionDuration
 	}
 
 	return &domain.Session{
-		ID:        generateUniqueID(), // Unique session ID
-		Token:     generateToken(),    // Secure token (32 bytes)
+		ID:        generateUniqueID(),
+		Token:     generateToken(),
+		UserID:    userID,
 		CreatedAt: time.Now(),
 		ExpiresAt: time.Now().Add(time.Duration(durationHours) * time.Hour),
 	}, nil
