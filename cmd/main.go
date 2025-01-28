@@ -27,6 +27,11 @@ func main() {
 	authHandler := handler.NewAuthHandler(authService)
 
 	router := gin.Default()
+	if err := router.SetTrustedProxies([]string{"172.16.0.0/12"}); err != nil {
+		log.Fatalf("Failed to set trusted proxies: %v", err)
+	}
+
+	router.LoadHTMLGlob("../templates/*")
 
 	router.POST("/register", authHandler.Register)
 	router.POST("/login", authHandler.Login)
