@@ -34,6 +34,7 @@ type AuthRepository interface {
 // service layer
 type UserService interface {
 	CreateUser(ctx context.Context, creds domain.Credentials) (*domain.User, error)
+	ValidateUser(ctx context.Context, creds domain.Credentials) (bool, error)
 	ReadUserById(ctx context.Context, id string) (*domain.User, error)
 	ReadUserByPhone(ctx context.Context, phonenumber string) (*domain.User, error)
 	UpdateUser(ctx context.Context, user domain.User) (*domain.User, error)
