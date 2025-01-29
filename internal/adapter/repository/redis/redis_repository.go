@@ -11,37 +11,52 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-/*
-const defaultOptions = {
-  baseKeyPrefix: "",
-  accountKeyPrefix: "user:account:",
-  accountByUserIdPrefix: "user:account:by-user-id:",
-  emailKeyPrefix: "user:email:",
-  sessionKeyPrefix: "user:session:",
-  sessionByUserIdKeyPrefix: "user:session:by-user-id:",
-  userKeyPrefix: "user:",
-  verificationTokenKeyPrefix: "user:token:",
-}
-*/
+var (
+	baseKeyPrefix              = ""
+	userKeyPrefix              = "user:"
+	emailKeyPrefix             = "user:email:"
+	verificationTokenKeyPrefix = "user:token:"
+	sessionKeyPrefix           = "user:session:"
+	accountKeyPrefix           = "user:account:"
+	accountByUserIdPrefix      = "user:account:by-user-id:"
+	sessionByUserIdKeyPrefix   = "user:session:by-user-id:"
+	phoneByUserIdKeyPrefix     = "user:phone:by-user-id:"
+)
 
 type redisAuthRepo struct {
 	client *redis.Client
 }
 
 func (r *redisAuthRepo) SaveUser(ctx context.Context, user domain.User) (string, error) {
-	userKey := fmt.Sprintf("user:%s", user.ID)
-	userPhoneKey := fmt.Sprintf("user:phone:%s", user.Phonenumber)
-
 	marshalledUser, err := json.Marshal(user)
 	if err != nil {
 		return "", err
 	}
 
-	return r.client.MSet(ctx, userKey, marshalledUser, userPhoneKey, user.Phonenumber).Result()
+	// Construct Redis keys using prefixes
+	userKey := userKeyPrefix + user.ID
+	phoneKey := phoneByUserIdKeyPrefix + user.ID
+	accountKey := accountKeyPrefix + user.ID
+
+	// Create a pipeline for multiple commands
+	pipe := r.client.TxPipeline()
+
+	// Set the user, phone, and account details
+	pipe.Set(ctx, userKey, marshalledUser, 0)
+	pipe.Set(ctx, phoneKey, user.Phonenumber, 0)
+	pipe.Set(ctx, accountKey, user.ID, 0)
+
+	// Execute the pipeline
+	_, err = pipe.Exec(ctx)
+	if err != nil {
+		return "", err
+	}
+
+	return user.ID, nil
 }
 
 func (r *redisAuthRepo) ReadUserByID(ctx context.Context, id string) (*domain.User, error) {
-	userkey := fmt.Sprintf("user:%s", id)
+	userkey := fmt.Sprintf("%s:%s", userKeyPrefix, id)
 
 	userResponse, err := r.client.Get(ctx, userkey).Result()
 	if err != nil {
@@ -57,10 +72,14 @@ func (r *redisAuthRepo) ReadUserByID(ctx context.Context, id string) (*domain.Us
 }
 
 func (r *redisAuthRepo) ReadUserByPhone(ctx context.Context, phone string) (*domain.User, error) {
-	userkey := fmt.Sprintf("user:phone:%s", phone)
+	userkey := fmt.Sprintf("%s:%s", phoneByUserIdKeyPrefix, phone)
 
 	userResponse, err := r.client.Get(ctx, userkey).Result()
 	if err != nil {
+		if errors.Is(err, redis.Nil) {
+			// Return nil, nil when the user is not found
+			return nil, nil
+		}
 		return nil, err
 	}
 
@@ -70,7 +89,6 @@ func (r *redisAuthRepo) ReadUserByPhone(ctx context.Context, phone string) (*dom
 	}
 
 	return user, nil
-
 }
 
 func (r *redisAuthRepo) UpdateUser(ctx context.Context, user domain.User) (*domain.User, error) {
