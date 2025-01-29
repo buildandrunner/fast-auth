@@ -7,7 +7,7 @@ import (
 type User struct {
 	ID          string `json:"id"`
 	Phonenumber string `json:"phonenumber"`
-	Password    string `json:"-"`
+	Password    string `json:"password,omitempty"`
 }
 
 type Session struct {
@@ -20,5 +20,5 @@ type Session struct {
 
 type Credentials struct {
 	Phonenumber string `json:"phonenumber" form:"phonenumber" binding:"required"`
-	Password    string `json:"password" form:"password" binding:"required"`
+	Password    string `json:"password" form:"password"`
 }
