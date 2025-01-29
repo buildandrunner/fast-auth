@@ -22,7 +22,12 @@ var (
 // CreateUser with Argon2id password hashing
 func (a *authService) CreateUser(ctx context.Context, creds domain.Credentials) (*domain.User, error) {
 	// Check for existing user
-	if _, err := a.authRepo.ReadUserByPhone(ctx, creds.Phonenumber); err == nil {
+	foundUser, err := a.authRepo.ReadUserByPhone(ctx, creds.Phonenumber)
+	if err != nil {
+		return nil, err
+	}
+
+	if foundUser != nil {
 		return nil, ErrUserExists
 	}
 
