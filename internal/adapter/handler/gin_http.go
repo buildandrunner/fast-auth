@@ -1,7 +1,9 @@
 package handler
 
 import (
+	"bytes"
 	"errors"
+	"io"
 	"log"
 	"net/http"
 	"time"
@@ -53,38 +55,44 @@ func (a *authHandler) Register(c *gin.Context) {
 		true,
 	)
 
-	c.HTML(http.StatusOK, "user_registered.html", gin.H{"user": ErrInternalServer})
+	c.HTML(http.StatusOK, "user_registered.html", gin.H{"user": user})
 }
 
 func (a *authHandler) Login(c *gin.Context) {
-	// credentials
+	// Debug: Read raw request body
+	body, _ := io.ReadAll(c.Request.Body)
+	log.Println("Raw Request Body:", string(body))
+
+	// Reset the request body so Gin can bind it
+	c.Request.Body = io.NopCloser(bytes.NewBuffer(body))
+
 	var creds domain.Credentials
 	if err := c.ShouldBindJSON(&creds); err != nil {
-		log.Println(err)
-		c.HTML(http.StatusBadRequest, "error.html", gin.H{"error": ErrInternalServer})
+		log.Println("JSON Unmarshal Error:", err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request format"})
 		return
 	}
 
+	// Validate user credentials
+	valid, err := a.authService.ValidateUser(c.Request.Context(), creds)
+	if err != nil || !valid {
+		log.Println("Invalid login attempt:", err)
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid credentials"})
+		return
+	}
+
+	// Create session after successful validation
 	session, err := a.authService.CreateSession(c.Request.Context(), creds.Phonenumber)
 	if err != nil {
 		log.Println(err)
-		c.HTML(http.StatusBadRequest, "error.html", gin.H{"error": "Unable to sign in"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Unable to sign in"})
 		return
 	}
 
-	// Store the session token as a cookie
-	c.SetCookie(
-		"session_id",  // Cookie name
-		session.Token, // Cookie value (session token)
-		int(session.ExpiresAt.Sub(time.Now()).Seconds()), // Max age in seconds
-		"/",         // Path
-		"localhost", // Domain (adjust for your environment)
-		false,       // Secure (set true for HTTPS)
-		true,        // HttpOnly (prevent JavaScript access)
-	)
+	// Set session cookie
+	c.SetCookie("session_id", session.Token, int(session.ExpiresAt.Sub(time.Now()).Seconds()), "/", "localhost", false, true)
 
-	// Render an HTML snippet for HTMX
-	c.HTML(http.StatusOK, "login_success.html", gin.H{"message": "welcome!"})
+	c.JSON(http.StatusOK, gin.H{"message": "Welcome!"})
 }
 
 func (a *authHandler) Logout(c *gin.Context) {
