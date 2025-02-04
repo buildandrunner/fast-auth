@@ -13,7 +13,6 @@ import (
 
 func main() {
 	redisURL := os.Getenv("REDIS_URL")
-	port := os.Getenv("PORT")
 
 	options, err := redis.ParseURL(redisURL)
 	if err != nil {
@@ -27,9 +26,6 @@ func main() {
 	authHandler := handler.NewAuthHandler(authService)
 
 	router := gin.Default()
-	if err := router.SetTrustedProxies([]string{"172.16.0.0/12"}); err != nil {
-		log.Fatalf("Failed to set trusted proxies: %v", err)
-	}
 
 	router.LoadHTMLGlob("../templates/*")
 
@@ -37,8 +33,7 @@ func main() {
 	router.POST("/login", authHandler.Login)
 	router.POST("/logout", authHandler.Logout)
 
-	log.Printf("Starting server on port %s\n", port)
-	if err := router.Run(port); err != nil {
+	if err := router.Run(); err != nil {
 		log.Fatalf("Failed to start server: %v", err)
 	}
 }
