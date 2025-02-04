@@ -1,2 +1,41 @@
+<<<<<<< HEAD
 test-scripts
 
+=======
+# Binaries and build artifacts
+/main
+*.exe
+*.out
+*.so
+
+# Dependency directories
+/vendor/
+
+# Logs and debugging
+*.log
+*.trace
+
+# OS-generated files
+.DS_Store
+Thumbs.db
+
+# Go module files
+go.sum
+
+# IDE/Editor configurations
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Docker-related
+auth-app/.env
+docker-compose.override.yml
+*.bak
+
+# Redis data
+bobidb/
+
+# test scripts
+test-scripts/
+>>>>>>> dev
